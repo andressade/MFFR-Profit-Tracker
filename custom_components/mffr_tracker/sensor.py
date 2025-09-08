@@ -105,6 +105,7 @@ class MFFRSlotEnergySensor(BaseMFFRSensor):
 
 class MFFRSlotProfitSensor(BaseMFFRSensor):
     _attr_name = "Slot Profit"
+    _attr_icon = "mdi:currency-eur"
     _attr_native_unit_of_measurement = "€"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -119,6 +120,7 @@ class MFFRSlotProfitSensor(BaseMFFRSensor):
 
 class MFFRTodayProfitSensor(BaseMFFRSensor):
     _attr_name = "Today Profit"
+    _attr_icon = "mdi:calendar-today"
     _attr_native_unit_of_measurement = "€"
     _attr_state_class = SensorStateClass.TOTAL
 
@@ -133,6 +135,7 @@ class MFFRTodayProfitSensor(BaseMFFRSensor):
 
 class MFFRWeekProfitSensor(BaseMFFRSensor):
     _attr_name = "Week Profit"
+    _attr_icon = "mdi:calendar-week"
     _attr_native_unit_of_measurement = "€"
     _attr_state_class = SensorStateClass.TOTAL
 
@@ -147,6 +150,7 @@ class MFFRWeekProfitSensor(BaseMFFRSensor):
 
 class MFFRMonthProfitSensor(BaseMFFRSensor):
     _attr_name = "Month Profit"
+    _attr_icon = "mdi:calendar-month"
     _attr_native_unit_of_measurement = "€"
     _attr_state_class = SensorStateClass.TOTAL
 
@@ -161,6 +165,7 @@ class MFFRMonthProfitSensor(BaseMFFRSensor):
 
 class MFFRRecentSlotsSensor(BaseMFFRSensor):
     _attr_name = "Recent Slots"
+    _attr_icon = "mdi:history"
 
     @property
     def unique_id(self) -> str:
@@ -189,6 +194,7 @@ class MFFRRecentSlotsSensor(BaseMFFRSensor):
 
 class MFFRUpCountSensor(BaseMFFRSensor):
     _attr_name = "UP Count Today"
+    _attr_icon = "mdi:arrow-up-bold"
 
     @property
     def unique_id(self) -> str:
@@ -201,6 +207,7 @@ class MFFRUpCountSensor(BaseMFFRSensor):
 
 class MFFRDownCountSensor(BaseMFFRSensor):
     _attr_name = "DOWN Count Today"
+    _attr_icon = "mdi:arrow-down-bold"
 
     @property
     def unique_id(self) -> str:
