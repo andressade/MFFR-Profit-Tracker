@@ -32,23 +32,25 @@ UP signal:   profit = (mffr_price - nordpool_price) * energy_kwh * 0.8
 
 ### Primary Sensors
 ```yaml
-sensor.mffr_power           # Current MFFR power (W), baseline-adjusted
-sensor.mffr_slot_energy     # Current slot energy (kWh)
-sensor.mffr_slot_profit     # Current slot profit (€)
-sensor.mffr_today_profit    # Daily total (€)
+sensor.mffr_profit_tracker_power            # Current MFFR power (W), baseline-adjusted
+sensor.mffr_profit_tracker_slot_energy      # Current slot energy (kWh)
+sensor.mffr_profit_tracker_slot_profit      # Current slot profit (€)
+sensor.mffr_profit_tracker_today_profit     # Daily total (€)
 ```
 
 ### Statistics Sensors  
 ```yaml
-sensor.mffr_week_profit     # Weekly total (€)
-sensor.mffr_month_profit    # Monthly total (€)
-sensor.mffr_up_count        # UP activations today
-sensor.mffr_down_count      # DOWN activations today
+sensor.mffr_profit_tracker_week_profit      # Weekly total (€)
+sensor.mffr_profit_tracker_month_profit     # Monthly total (€)
+sensor.mffr_profit_tracker_year_profit      # Yearly total (€)
+sensor.mffr_profit_tracker_all_time_profit  # All-time total (€)
+sensor.mffr_profit_tracker_up_count_today   # UP activations today
+sensor.mffr_profit_tracker_down_count_today # DOWN activations today
 ```
 
 ### Meta Sensors
 ```yaml
-sensor.mffr_recent_slots    # Attributes include recent slot table/rows
+sensor.mffr_profit_tracker_recent_slots     # Attributes include recent slot table/rows
 ```
 
 ## Configuration
@@ -102,17 +104,17 @@ mffr_tracker:
 ```yaml
 type: entities
 entities:
-  - sensor.mffr_power  
-  - sensor.mffr_slot_profit
-  - sensor.mffr_today_profit
+  - sensor.mffr_profit_tracker_power
+  - sensor.mffr_profit_tracker_slot_profit
+  - sensor.mffr_profit_tracker_today_profit
 ```
 
 #### 2. History Graph
 ```yaml
 type: history-graph
 entities:
-  - sensor.mffr_power
-  - sensor.mffr_slot_profit
+  - sensor.mffr_profit_tracker_power
+  - sensor.mffr_profit_tracker_slot_profit
 hours_to_show: 24
 ```
 
@@ -120,9 +122,9 @@ hours_to_show: 24
 ```yaml
 type: statistics-graph
 entities:
-  - sensor.mffr_today_profit
-  - sensor.mffr_week_profit
-  - sensor.mffr_month_profit
+  - sensor.mffr_profit_tracker_today_profit
+  - sensor.mffr_profit_tracker_week_profit
+  - sensor.mffr_profit_tracker_month_profit
 stat_types:
   - sum
   - mean
@@ -133,7 +135,7 @@ stat_types:
 type: markdown
 content: |
   ## Recent MFFR Activities
-  {{ states.sensor.mffr_recent_slots.attributes.slots_table }}
+  {{ states.sensor.mffr_profit_tracker_recent_slots.attributes.slots_table }}
 ```
 
 ## Data Storage

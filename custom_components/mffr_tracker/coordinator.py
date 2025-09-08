@@ -80,6 +80,9 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._month_profit: float = 0.0
         self._week_key: Optional[tuple[int, int]] = None  # (iso_year, iso_week)
         self._month_key: Optional[tuple[int, int]] = None  # (year, month)
+        self._year_profit: float = 0.0
+        self._year_key: Optional[int] = None  # year
+        self._all_profit: float = 0.0
         self._up_count: int = 0
         self._down_count: int = 0
 
@@ -126,6 +129,14 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 if tuple(saved_month) == (now.year, now.month):
                     self._month_key = (now.year, now.month)
                     self._month_profit = float(data.get("month_profit", 0.0))
+            # Year
+            saved_year = data.get("year_key")
+            if isinstance(saved_year, int):
+                if saved_year == now.year:
+                    self._year_key = now.year
+                    self._year_profit = float(data.get("year_profit", 0.0))
+            # All-time
+            self._all_profit = float(data.get("all_profit", 0.0))
         except Exception:
             # Ignore corrupt store
             pass
@@ -140,6 +151,9 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "week_profit": self._week_profit,
             "month_key": list(self._month_key) if self._month_key else None,
             "month_profit": self._month_profit,
+            "year_key": self._year_key,
+            "year_profit": self._year_profit,
+            "all_profit": self._all_profit,
         }
         try:
             await self._store.async_save(payload)
@@ -240,6 +254,14 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self._month_key = ym
             await self._async_save_state()
 
+        # Year boundary
+        if self._year_key is None:
+            self._year_key = now.year
+        elif self._year_key != now.year:
+            self._year_profit = 0.0
+            self._year_key = now.year
+            await self._async_save_state()
+
     def _finalize_active_slot(self) -> None:
         if not self._active_slot:
             return
@@ -259,6 +281,8 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self._today_profit += profit
             self._week_profit += profit
             self._month_profit += profit
+            self._year_profit += profit
+            self._all_profit += profit
         # Count activations per finalized slot (one per slot with signal)
         if slot.signal == "UP":
             self._up_count += 1
@@ -382,6 +406,8 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 self._today_profit += s.profit
                 self._week_profit += s.profit
                 self._month_profit += s.profit
+                self._year_profit += s.profit
+                self._all_profit += s.profit
                 backfilled = True
         if backfilled:
             self.hass.async_create_task(self._async_save_state())
@@ -396,6 +422,8 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "down_count": self._down_count,
             "week_profit": round(self._week_profit, 4),
             "month_profit": round(self._month_profit, 4),
+            "year_profit": round(self._year_profit, 4),
+            "all_time_profit": round(self._all_profit, 4),
             "slot_start": slot_start,
             "slot_end": slot_end,
             # Expose the chosen NPS price

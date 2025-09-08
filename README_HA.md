@@ -26,15 +26,17 @@ Install
 What it provides
 ----------------
 
-- `sensor.mffr_power` (W, baseline-adjusted)
-- `sensor.mffr_slot_energy` (kWh)
-- `sensor.mffr_slot_profit` (€)
-- `sensor.mffr_today_profit` (€)
-- `sensor.mffr_week_profit` (€)
-- `sensor.mffr_month_profit` (€)
-- `sensor.mffr_up_count` (count, today)
-- `sensor.mffr_down_count` (count, today)
-- `sensor.mffr_recent_slots` (attributes include a markdown table)
+- `sensor.mffr_profit_tracker_power` (W, baseline-adjusted)
+- `sensor.mffr_profit_tracker_slot_energy` (kWh)
+- `sensor.mffr_profit_tracker_slot_profit` (€)
+- `sensor.mffr_profit_tracker_today_profit` (€)
+- `sensor.mffr_profit_tracker_week_profit` (€)
+- `sensor.mffr_profit_tracker_month_profit` (€)
+- `sensor.mffr_profit_tracker_year_profit` (€)
+- `sensor.mffr_profit_tracker_all_time_profit` (€)
+- `sensor.mffr_profit_tracker_up_count_today` (count, today)
+- `sensor.mffr_profit_tracker_down_count_today` (count, today)
+- `sensor.mffr_profit_tracker_recent_slots` (attributes include a markdown table)
 
 Recommended extras
 ------------------
@@ -43,7 +45,9 @@ Recommended extras
   - See `examples/home_assistant/statistics_sensors.yaml`
 
 - Add Lovelace cards:
-  - See `examples/home_assistant/lovelace_cards.yaml`
+  - Base cards: `examples/home_assistant/lovelace_cards.yaml`
+  - ApexCharts compact (single stack): `examples/home_assistant/apexcharts_compact.yaml` (requires `apexcharts-card` via HACS)
+  - ApexCharts extended: `examples/home_assistant/apexcharts_mffr.yaml`
 
 Notes
 -----
@@ -53,6 +57,14 @@ Notes
 - If prices are temporarily unavailable, slot profit is deferred until data becomes available.
 - Daily/weekly/monthly totals are persisted across restarts and reset on calendar boundaries (local time, ISO week).
 - UP/DOWN counts are for finalized slots and persist across restarts for the current day.
+- Yearly and All-Time profits: maintained by the integration and persisted; year resets on Jan 1.
+
+Lovelace (ApexCharts)
+---------------------
+
+1) Install `apexcharts-card` via HACS (Frontend → Explore & add repositories → search "ApexCharts Card").
+2) Add a Manual card and paste contents from `examples/home_assistant/apexcharts_mffr.yaml`.
+3) Ensure the referenced sensors exist (today/week/month/year/all-time/slot profit).
 
 Additional details
 ------------------

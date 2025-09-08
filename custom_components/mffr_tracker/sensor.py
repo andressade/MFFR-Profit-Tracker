@@ -35,6 +35,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entities.append(MFFRTodayProfitSensor(coordinator, entry))
     entities.append(MFFRWeekProfitSensor(coordinator, entry))
     entities.append(MFFRMonthProfitSensor(coordinator, entry))
+    entities.append(MFFRYearProfitSensor(coordinator, entry))
+    entities.append(MFFRAllTimeProfitSensor(coordinator, entry))
     entities.append(MFFRUpCountSensor(coordinator, entry))
     entities.append(MFFRDownCountSensor(coordinator, entry))
     entities.append(MFFRRecentSlotsSensor(coordinator, entry))
@@ -161,6 +163,36 @@ class MFFRMonthProfitSensor(BaseMFFRSensor):
     @property
     def native_value(self) -> float | None:
         return (self.coordinator.data or {}).get("month_profit")
+
+
+class MFFRYearProfitSensor(BaseMFFRSensor):
+    _attr_name = "Year Profit"
+    _attr_icon = "mdi:calendar-range"
+    _attr_native_unit_of_measurement = "€"
+    _attr_state_class = SensorStateClass.TOTAL
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry.entry_id}_year_profit"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("year_profit")
+
+
+class MFFRAllTimeProfitSensor(BaseMFFRSensor):
+    _attr_name = "All-Time Profit"
+    _attr_icon = "mdi:cash-multiple"
+    _attr_native_unit_of_measurement = "€"
+    _attr_state_class = SensorStateClass.TOTAL
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry.entry_id}_all_time_profit"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("all_time_profit")
 
 
 class MFFRRecentSlotsSensor(BaseMFFRSensor):

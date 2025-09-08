@@ -1,0 +1,99 @@
+type: vertical-stack
+cards:
+  - type: entities
+    title: MFFR Summary
+    entities:
+      - entity: sensor.mffr_profit_tracker_today_profit
+        name: Today
+      - entity: sensor.mffr_profit_tracker_week_profit
+        name: Week
+      - entity: sensor.mffr_profit_tracker_month_profit
+        name: Month
+      - entity: sensor.mffr_profit_tracker_year_profit
+        name: Year
+      - entity: sensor.mffr_profit_tracker_all_time_profit
+        name: All-Time
+      - entity: sensor.mffr_profit_tracker_up_count_today
+        name: UP Count Today
+      - entity: sensor.mffr_profit_tracker_down_count_today
+        name: DOWN Count Today
+
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: MFFR 24h — Power & Slot Profit
+      show_states: false
+    graph_span: 24h
+    apex_config:
+      stroke:
+        curve: smooth
+      yaxis:
+        - id: power
+          title:
+            text: Power (W)
+          decimalsInFloat: 0
+        - id: eur
+          opposite: true
+          title:
+            text: Profit (€)
+          decimalsInFloat: 2
+      tooltip:
+        y:
+          formatter: |
+            EVAL:(val, opts) => {
+              const ax = opts.seriesIndex === 1 ? '€' : '';
+              const v = Number(val);
+              return opts.seriesIndex === 1 ? `${ax}${v.toFixed(4)}` : `${v.toFixed(0)} W`;
+            }
+    series:
+      - entity: sensor.mffr_profit_tracker_power
+        name: Power
+        type: line
+        yaxis_id: power
+      - entity: sensor.mffr_profit_tracker_slot_profit
+        name: Slot Profit
+        type: column
+        yaxis_id: eur
+        group_by:
+          duration: 15min
+          func: last
+        transform: |-
+          if (x == null || Number.isNaN(x)) return 0;
+          return x;
+        color_threshold:
+          - value: -0.000001
+            color: '#e53935'
+          - value: 0.000001
+            color: '#43a047'
+
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: MFFR 30d — Daily Profit
+      show_states: false
+    graph_span: 30d
+    apex_config:
+      chart:
+        type: bar
+      plotOptions:
+        bar:
+          columnWidth: 60%
+          borderRadius: 4
+      dataLabels:
+        enabled: false
+      yaxis:
+        labels:
+          formatter: |
+            EVAL:(val) => `€${Number(val).toFixed(2)}`
+    series:
+      - entity: sensor.mffr_profit_tracker_slot_profit
+        name: Daily Profit
+        type: column
+        group_by:
+          duration: 1d
+          func: sum
+        color_threshold:
+          - value: -0.000001
+            color: '#e53935'
+          - value: 0.000001
+            color: '#43a047'
