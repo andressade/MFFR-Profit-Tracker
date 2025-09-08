@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developers.home-assistant.io)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -3,7 +3,27 @@
     "step": {
       "user": {
         "title": "MFFR Profit Tracker",
-        "description": "Configure entities and options"
+        "description": "Select the entities used for detecting the MFFR signal, measuring battery power and prices.",
+        "data": {
+          "battery_mode_selector": "Mode entity (sensor/input_select)",
+          "battery_power": "Battery power (W)",
+          "nordpool_price": "Nord Pool price (€/kWh)",
+          "grid_power": "Grid power (W) — optional",
+          "scan_interval": "Scan interval (seconds)",
+          "fusebox_fee_percent": "Operator fee (%)",
+          "baseline_enabled": "Use baseline-adjusted power",
+          "nps_source": "Nord Pool price source"
+        },
+        "data_description": {
+          "battery_mode_selector": "Entity to read current signal from. Accepts sensor or input_select. Mapping is case-insensitive: contains 'sell' → UP, contains 'buy' → DOWN, otherwise → IDLE. Example: sensor.qw_mode.",
+          "battery_power": "Instantaneous battery power in watts. Positive = discharging, negative = charging. Example: sensor.ss_battery_power.",
+          "nordpool_price": "HA sensor providing Nord Pool energy price in €/kWh (no VAT/tariffs). Used when nps_source='ha' or as fallback for 'auto'.",
+          "grid_power": "Optional. Grid power sensor in watts. Not required for basic profit calculation.",
+          "scan_interval": "How often to poll entities and update calculations. Default: 10 seconds.",
+          "fusebox_fee_percent": "Percentage fee applied to activation revenue (e.g., 20 = 20%).",
+          "baseline_enabled": "When enabled, subtracts idle baseline from battery power to compute MFFR power.",
+          "nps_source": "Where to take Nord Pool price from: 'ha' = HA sensor, 'api' = external API, 'auto' = API if available, otherwise HA."
+        }
       }
     },
     "abort": {
@@ -14,10 +34,29 @@
       "step": {
         "init": {
           "title": "MFFR Options",
-          "description": "Adjust polling and processing options"
+          "description": "Adjust polling, pricing source, and baseline handling.",
+          "data": {
+            "battery_mode_selector": "Mode entity (sensor/input_select)",
+            "battery_power": "Battery power (W)",
+            "nordpool_price": "Nord Pool price (€/kWh)",
+            "grid_power": "Grid power (W) — optional",
+            "scan_interval": "Scan interval (seconds)",
+            "fusebox_fee_percent": "Operator fee (%)",
+            "baseline_enabled": "Use baseline-adjusted power",
+            "nps_source": "Nord Pool price source"
+          },
+          "data_description": {
+            "battery_mode_selector": "Entity providing signal state (buy/sell/normal → DOWN/UP/IDLE). Accepts sensor or input_select.",
+            "battery_power": "Instantaneous battery power in watts (positive = discharge, negative = charge).",
+            "nordpool_price": "Price in €/kWh from HA. Used when nps_source='ha' or as fallback for 'auto'.",
+            "grid_power": "Optional auxiliary sensor; not required for basic profit.",
+            "scan_interval": "Update frequency in seconds. Default: 10.",
+            "fusebox_fee_percent": "Fee percentage deducted from activation revenue.",
+            "baseline_enabled": "Subtract idle baseline to get MFFR power (recommended).",
+            "nps_source": "Choose 'ha', 'api' or 'auto' for price source handling."
+          }
         }
       }
     }
   }
 }
-

@@ -32,7 +32,6 @@ UP signal:   profit = (mffr_price - nordpool_price) * energy_kwh * 0.8
 
 ### Primary Sensors
 ```yaml
-sensor.mffr_signal          # "UP" / "DOWN" / "IDLE"
 sensor.mffr_power           # Current MFFR power (W), baseline-adjusted
 sensor.mffr_slot_energy     # Current slot energy (kWh)
 sensor.mffr_slot_profit     # Current slot profit (€)
@@ -103,7 +102,6 @@ mffr_tracker:
 ```yaml
 type: entities
 entities:
-  - sensor.mffr_signal
   - sensor.mffr_power  
   - sensor.mffr_slot_profit
   - sensor.mffr_today_profit

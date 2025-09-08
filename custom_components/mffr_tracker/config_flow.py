@@ -33,10 +33,18 @@ class MFFRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="MFFR Profit Tracker", data=user_input)
 
+        # Prefer sensor.qw_mode by default if it exists, and allow both input_select and sensor domains
+        default_mode_entity: str | None = None
+        try:
+            if self.hass.states.get("sensor.qw_mode") is not None:
+                default_mode_entity = "sensor.qw_mode"
+        except Exception:
+            default_mode_entity = None
+
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_BATTERY_MODE): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain=["input_select"])  # type: ignore[arg-type]
+                vol.Required(CONF_BATTERY_MODE, default=default_mode_entity): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["input_select", "sensor"])  # type: ignore[arg-type]
                 ),
                 vol.Required(CONF_BATTERY_POWER): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor"])  # type: ignore[arg-type]
@@ -77,7 +85,7 @@ class MFFROptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_BATTERY_MODE, default=data.get(CONF_BATTERY_MODE)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain=["input_select"])  # type: ignore[arg-type]
+                    selector.EntitySelectorConfig(domain=["input_select", "sensor"])  # type: ignore[arg-type]
                 ),
                 vol.Required(CONF_BATTERY_POWER, default=data.get(CONF_BATTERY_POWER)): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor"])  # type: ignore[arg-type]

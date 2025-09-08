@@ -28,7 +28,7 @@ from .coordinator import MFFRCoordinator
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
     coordinator: MFFRCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[SensorEntity] = []
-    entities.append(MFFRSignalSensor(coordinator, entry))
+    # Signal is read directly from the configured mode entity; no separate signal sensor is exposed.
     entities.append(MFFRPowerSensor(coordinator, entry))
     entities.append(MFFRSlotEnergySensor(coordinator, entry))
     entities.append(MFFRSlotProfitSensor(coordinator, entry))
@@ -71,18 +71,6 @@ class BaseMFFRSensor(CoordinatorEntity[MFFRCoordinator], SensorEntity):
             ATTR_MFFR_POWER_W: data.get("mffr_power_w"),
         }
         return attrs
-
-
-class MFFRSignalSensor(BaseMFFRSensor):
-    _attr_name = "Signal"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._entry.entry_id}_signal"
-
-    @property
-    def native_value(self) -> str | None:
-        return (self.coordinator.data or {}).get("signal")
 
 
 class MFFRPowerSensor(BaseMFFRSensor):
