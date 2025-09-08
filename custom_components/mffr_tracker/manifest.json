@@ -1,7 +1,6 @@
 {
   "domain": "mffr_tracker",
   "name": "MFFR Profit Tracker",
-  "version": "0.1.0",
   "documentation": "",
   "issue_tracker": "",
   "codeowners": ["@your-username"],
@@ -10,4 +9,3 @@
   "requirements": [],
   "dependencies": []
 }
-
