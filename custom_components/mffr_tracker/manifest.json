@@ -1,11 +1,12 @@
 {
   "domain": "mffr_tracker",
   "name": "MFFR Profit Tracker",
-  "documentation": "",
-  "issue_tracker": "",
-  "codeowners": ["@your-username"],
+  "documentation": "https://github.com/andressade/MFFR-Profit-Tracker",
+  "issue_tracker": "https://github.com/andressade/MFFR-Profit-Tracker/issues",
+  "codeowners": ["@andressade"],
   "config_flow": true,
   "iot_class": "calculated",
   "requirements": [],
-  "dependencies": []
+  "dependencies": [],
+  "ha_version": "2023.12.0"
 }
