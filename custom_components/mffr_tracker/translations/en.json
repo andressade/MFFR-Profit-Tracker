@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MFFR Profit Tracker",
+        "description": "Configure entities and options"
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured"
+    },
+    "error": {},
+    "options": {
+      "step": {
+        "init": {
+          "title": "MFFR Options",
+          "description": "Adjust polling and processing options"
+        }
+      }
+    }
+  }
+}
+

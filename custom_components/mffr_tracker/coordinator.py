@@ -1,0 +1,428 @@
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Deque, Dict, Optional
+import logging
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers import aiohttp_client
+from homeassistant.util import dt as dt_util
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.storage import Store
+
+from .const import (
+    CONF_BATTERY_MODE,
+    CONF_BATTERY_POWER,
+    CONF_NORDPOOL_PRICE,
+    CONF_GRID_POWER,
+    CONF_SCAN_INTERVAL,
+    CONF_FUSEBOX_FEE,
+    CONF_BASELINE_ENABLED,
+    CONF_NPS_SOURCE,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_FUSEBOX_FEE,
+    DEFAULT_BASELINE_ENABLED,
+    DEFAULT_NPS_SOURCE,
+)
+
+
+def _quarter_start(ts: datetime) -> datetime:
+    minute = (ts.minute // 15) * 15
+    return ts.replace(minute=minute, second=0, microsecond=0)
+
+
+@dataclass
+class Slot:
+    start: datetime
+    end: datetime
+    signal: str
+    energy_kwh: float = 0.0
+    duration_s: float = 0.0
+    was_backup: bool = False
+    cancelled: bool = False
+    baseline_w: Optional[float] = None
+    mffr_price: Optional[float] = None
+    nordpool_price: Optional[float] = None
+    profit: Optional[float] = None
+
+
+class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self.entry = entry
+        data = entry.data
+        options = entry.options
+
+        self.entity_mode = options.get(CONF_BATTERY_MODE, data.get(CONF_BATTERY_MODE))
+        self.entity_power = options.get(CONF_BATTERY_POWER, data.get(CONF_BATTERY_POWER))
+        self.entity_nordpool = options.get(CONF_NORDPOOL_PRICE, data.get(CONF_NORDPOOL_PRICE))
+        self.entity_grid = options.get(CONF_GRID_POWER, data.get(CONF_GRID_POWER))
+        self.scan_seconds = int(options.get(CONF_SCAN_INTERVAL, data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)))
+        self.fusebox_fee_pct = float(options.get(CONF_FUSEBOX_FEE, data.get(CONF_FUSEBOX_FEE, DEFAULT_FUSEBOX_FEE)))
+        self.baseline_enabled = bool(options.get(CONF_BASELINE_ENABLED, data.get(CONF_BASELINE_ENABLED, DEFAULT_BASELINE_ENABLED)))
+        self.nps_source = (options.get(CONF_NPS_SOURCE, data.get(CONF_NPS_SOURCE, DEFAULT_NPS_SOURCE)) or "ha").lower()
+
+        super().__init__(
+            hass,
+            logging.getLogger(__name__),
+            name="mffr_tracker",
+            update_interval=timedelta(seconds=self.scan_seconds),
+        )
+
+        self._recent_slots: Deque[Slot] = deque(maxlen=48)
+        self._active_slot: Optional[Slot] = None
+        self._today_profit: float = 0.0
+        self._today_date: Optional[datetime.date] = None
+        self._week_profit: float = 0.0
+        self._month_profit: float = 0.0
+        self._week_key: Optional[tuple[int, int]] = None  # (iso_year, iso_week)
+        self._month_key: Optional[tuple[int, int]] = None  # (year, month)
+        self._up_count: int = 0
+        self._down_count: int = 0
+
+        self._baseline_sum_w: float = 0.0
+        self._baseline_samples: int = 0
+        self._baseline_last_w: float = 0.0
+        self._last_ts: Optional[datetime] = None
+
+        # Cache per-slot prices keyed by local slot-start ISO
+        # value: {"mfrr_price": float, "nps_price": float}
+        self._mffr_price_cache: Dict[str, Dict[str, float]] = {}
+        self._session = aiohttp_client.async_get_clientsession(hass)
+        self._store: Store = Store(hass, 1, f"mffr_tracker_{entry.entry_id}.json")
+        self._last_price_fetch: Optional[datetime] = None
+
+    async def async_load_state(self) -> None:
+        data = await self._store.async_load() or {}
+        try:
+            # Restore totals only if keys match current periods
+            now = dt_util.now()
+            # Day
+            saved_day = data.get("today_date")
+            if saved_day:
+                try:
+                    y, m, d = saved_day.split("-")
+                    saved_date = datetime(int(y), int(m), int(d)).date()
+                except Exception:
+                    saved_date = None
+                if saved_date == now.date():
+                    self._today_date = saved_date
+                    self._today_profit = float(data.get("today_profit", 0.0))
+                    self._up_count = int(data.get("up_count", 0))
+                    self._down_count = int(data.get("down_count", 0))
+            # Week
+            saved_week = data.get("week_key")  # [iso_year, iso_week]
+            if isinstance(saved_week, list) and len(saved_week) == 2:
+                iso_year, iso_week, _ = now.isocalendar()
+                if tuple(saved_week) == (iso_year, iso_week):
+                    self._week_key = (iso_year, iso_week)
+                    self._week_profit = float(data.get("week_profit", 0.0))
+            # Month
+            saved_month = data.get("month_key")  # [year, month]
+            if isinstance(saved_month, list) and len(saved_month) == 2:
+                if tuple(saved_month) == (now.year, now.month):
+                    self._month_key = (now.year, now.month)
+                    self._month_profit = float(data.get("month_profit", 0.0))
+        except Exception:
+            # Ignore corrupt store
+            pass
+
+    async def _async_save_state(self) -> None:
+        payload = {
+            "today_date": self._today_date.isoformat() if self._today_date else None,
+            "today_profit": self._today_profit,
+            "up_count": self._up_count,
+            "down_count": self._down_count,
+            "week_key": list(self._week_key) if self._week_key else None,
+            "week_profit": self._week_profit,
+            "month_key": list(self._month_key) if self._month_key else None,
+            "month_profit": self._month_profit,
+        }
+        try:
+            await self._store.async_save(payload)
+        except Exception:
+            pass
+
+    def _parse_any_datetime(self, s: str) -> Optional[datetime]:
+        if not isinstance(s, str):
+            return None
+        # normalize: allow space or 'T', allow +0300 or +03:00
+        s2 = s.strip().replace(" ", "T")
+        # Insert colon in timezone if missing (e.g., +0300 -> +03:00)
+        if len(s2) >= 5 and (s2[-5] in ["+", "-"]) and s2[-3] != ":":
+            s2 = f"{s2[:-2]}:{s2[-2:]}"
+        try:
+            dt = dt_util.parse_datetime(s2)
+        except Exception:
+            return None
+        if not dt:
+            return None
+        return dt_util.as_local(dt)
+
+    async def _fetch_mffr_prices(self, ts: datetime) -> None:
+        # Fetch current set of FRR prices (15-min granularity) and cache
+        url = "https://tihend.energy/api/v1/frr"
+        try:
+            async with self._session.get(url, timeout=10) as resp:
+                if resp.status != 200:
+                    return
+                data = await resp.json()
+        except Exception:
+            return
+
+        items = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return
+        for item in items:
+            start_s = item.get("start")
+            mp = item.get("mfrr_price")
+            np = item.get("nps_price")
+            if not start_s or mp is None:
+                continue
+            dt = self._parse_any_datetime(start_s)
+            if not dt:
+                continue
+            # Slot-level key (15-min aligned start)
+            slot_key = _quarter_start(dt).isoformat()
+            rec = self._mffr_price_cache.get(slot_key, {})
+            rec["mfrr_price"] = float(mp)
+            if np is not None:
+                rec["nps_price"] = float(np)
+            self._mffr_price_cache[slot_key] = rec
+
+    def _get_slot_prices_for(self, ts: datetime) -> Dict[str, float]:
+        key = _quarter_start(ts).isoformat()
+        return self._mffr_price_cache.get(key, {})
+
+    def _mode_to_signal(self, mode: str) -> str:
+        m = (mode or "").lower()
+        if "sell" in m:
+            return "UP"
+        if "buy" in m:
+            return "DOWN"
+        return "IDLE"
+
+    async def _async_update_prices_if_needed(self, now: datetime) -> None:
+        # Fetch at most once per 60 seconds and only if slot prices missing
+        if not self._get_slot_prices_for(now):
+            if self._last_price_fetch is None or (now - self._last_price_fetch) >= timedelta(seconds=60):
+                await self._fetch_mffr_prices(now)
+                self._last_price_fetch = now
+
+    async def _async_finalize_previous_day(self, now: datetime) -> None:
+        if self._today_date is None:
+            self._today_date = now.date()
+        elif now.date() != self._today_date:
+            self._today_profit = 0.0
+            self._up_count = 0
+            self._down_count = 0
+            self._today_date = now.date()
+            await self._async_save_state()
+
+        # Week boundary (ISO week, Monday-based)
+        iso_year, iso_week, _ = now.isocalendar()
+        if self._week_key is None:
+            self._week_key = (iso_year, iso_week)
+        elif self._week_key != (iso_year, iso_week):
+            self._week_profit = 0.0
+            self._week_key = (iso_year, iso_week)
+            await self._async_save_state()
+
+        # Month boundary
+        ym = (now.year, now.month)
+        if self._month_key is None:
+            self._month_key = ym
+        elif self._month_key != ym:
+            self._month_profit = 0.0
+            self._month_key = ym
+            await self._async_save_state()
+
+    def _finalize_active_slot(self) -> None:
+        if not self._active_slot:
+            return
+        slot = self._active_slot
+
+        fee = self.fusebox_fee_pct / 100.0
+        np = slot.nordpool_price
+        mp = slot.mffr_price
+        if np is not None and mp is not None and slot.energy_kwh > 0:
+            if slot.signal == "UP":
+                profit = (mp - np) * slot.energy_kwh * (1 - fee)
+            elif slot.signal == "DOWN":
+                profit = (np - mp) * slot.energy_kwh * (1 - fee)
+            else:
+                profit = 0.0
+            slot.profit = profit
+            self._today_profit += profit
+            self._week_profit += profit
+            self._month_profit += profit
+        # Count activations per finalized slot (one per slot with signal)
+        if slot.signal == "UP":
+            self._up_count += 1
+        elif slot.signal == "DOWN":
+            self._down_count += 1
+        # Persist after change
+        # Note: not awaited here to avoid blocking; schedule task
+        self.hass.async_create_task(self._async_save_state())
+        self._recent_slots.appendleft(slot)
+        self._active_slot = None
+
+    async def _update_baseline(self, battery_w: float, dt_s: float, signal: str, now: datetime) -> None:
+        if signal == "IDLE":
+            # Accumulate signed power for realistic baseline
+            self._baseline_sum_w += float(battery_w)
+            self._baseline_samples += 1
+        # finalize baseline near slot end and carry forward last value
+        if now.minute % 15 == 14 and now.second >= 50:
+            if self._baseline_samples > 0:
+                avg = self._baseline_sum_w / self._baseline_samples
+            else:
+                avg = self._baseline_last_w
+            self._baseline_sum_w = 0.0
+            self._baseline_samples = 0
+            self._baseline_last_w = avg
+            if self._active_slot and self._active_slot.baseline_w is None:
+                self._active_slot.baseline_w = avg
+
+    async def _async_update_logic(self) -> Dict[str, Any]:
+        now = dt_util.now()
+        await self._async_finalize_previous_day(now)
+
+        mode_state = self.hass.states.get(self.entity_mode)
+        power_state = self.hass.states.get(self.entity_power)
+        nordpool_state = self.hass.states.get(self.entity_nordpool)
+
+        signal = self._mode_to_signal(mode_state.state if mode_state else "")
+        try:
+            battery_w = float(power_state.state) if power_state and power_state.state not in ("unknown", "unavailable") else 0.0
+        except Exception:
+            battery_w = 0.0
+        try:
+            nordpool = float(nordpool_state.state) if nordpool_state and nordpool_state.state not in ("unknown", "unavailable") else None
+        except Exception:
+            nordpool = None
+
+        await self._async_update_prices_if_needed(now)
+        slot_prices = self._get_slot_prices_for(now)
+        mffr_price = slot_prices.get("mfrr_price")
+        # Convert €/MWh → €/kWh if needed (heuristic threshold)
+        if mffr_price is not None:
+            try:
+                mp = float(mffr_price)
+                mffr_price = mp / 1000.0 if abs(mp) > 5 else mp
+            except Exception:
+                mffr_price = None
+
+        if self._last_ts is None:
+            self._last_ts = now
+        dt_s = max(0.0, (now - self._last_ts).total_seconds())
+        self._last_ts = now
+
+        await self._update_baseline(battery_w, dt_s, signal, now)
+
+        baseline_w = None
+        if self.baseline_enabled:
+            baseline_w = None
+            if self._baseline_samples > 0:
+                baseline_w = self._baseline_sum_w / max(1, self._baseline_samples)
+            else:
+                baseline_w = self._baseline_last_w
+            mffr_power_w = abs(battery_w - (baseline_w or 0.0))
+        else:
+            mffr_power_w = abs(battery_w)
+
+        slot_start = _quarter_start(now)
+        slot_end = slot_start + timedelta(minutes=15)
+
+        if signal in ("UP", "DOWN"):
+            if not self._active_slot:
+                was_backup = not (now.minute % 15 == 0 and now.second < 10)
+                self._active_slot = Slot(start=slot_start, end=slot_end, signal=signal, was_backup=was_backup)
+            if self._active_slot and self._active_slot.signal != signal:
+                self._finalize_active_slot()
+                self._active_slot = Slot(start=slot_start, end=slot_end, signal=signal, was_backup=True)
+
+            if self._active_slot:
+                # Choose NPS price source per configuration
+                nps_for_slot = slot_prices.get("nps_price")
+                if self.nps_source == "api":
+                    chosen_nps = nps_for_slot
+                elif self.nps_source == "auto":
+                    chosen_nps = nps_for_slot if nps_for_slot is not None else nordpool
+                else:  # 'ha'
+                    chosen_nps = nordpool
+                self._active_slot.nordpool_price = chosen_nps
+                self._active_slot.mffr_price = mffr_price
+                self._active_slot.baseline_w = self._active_slot.baseline_w if self._active_slot.baseline_w is not None else baseline_w
+                self._active_slot.energy_kwh += (mffr_power_w * dt_s) / 3_600_000.0
+                self._active_slot.duration_s += dt_s
+        else:
+            if self._active_slot:
+                self._active_slot.cancelled = True
+                self._finalize_active_slot()
+
+        if now >= slot_end:
+            if self._active_slot:
+                self._finalize_active_slot()
+
+        # Backfill profits for recent finalized slots if prices became available later
+        backfilled = False
+        for s in list(self._recent_slots):
+            if s.profit is None and s.nordpool_price is not None and s.mffr_price is not None and s.energy_kwh and s.energy_kwh > 0:
+                fee = self.fusebox_fee_pct / 100.0
+                if s.signal == "UP":
+                    s.profit = (s.mffr_price - s.nordpool_price) * s.energy_kwh * (1 - fee)
+                elif s.signal == "DOWN":
+                    s.profit = (s.nordpool_price - s.mffr_price) * s.energy_kwh * (1 - fee)
+                else:
+                    s.profit = 0.0
+                self._today_profit += s.profit
+                self._week_profit += s.profit
+                self._month_profit += s.profit
+                backfilled = True
+        if backfilled:
+            self.hass.async_create_task(self._async_save_state())
+
+        data: Dict[str, Any] = {
+            "signal": signal,
+            "mffr_power_w": round(mffr_power_w, 2),
+            "slot_energy_kwh": round(self._active_slot.energy_kwh, 6) if self._active_slot else 0.0,
+            "slot_profit": round(self._active_slot.profit, 4) if (self._active_slot and self._active_slot.profit is not None) else None,
+            "today_profit": round(self._today_profit, 4),
+            "up_count": self._up_count,
+            "down_count": self._down_count,
+            "week_profit": round(self._week_profit, 4),
+            "month_profit": round(self._month_profit, 4),
+            "slot_start": slot_start,
+            "slot_end": slot_end,
+            # Expose the chosen NPS price
+            "nordpool_price": (
+                slot_prices.get("nps_price") if self.nps_source in ("api", "auto") and slot_prices.get("nps_price") is not None else nordpool
+            ),
+            "mffr_price": mffr_price,
+            "was_backup": bool(self._active_slot.was_backup) if self._active_slot else False,
+            "cancelled": bool(self._active_slot.cancelled) if self._active_slot else False,
+            "baseline_w": round(baseline_w, 2) if baseline_w is not None else None,
+            "duration_minutes": round((self._active_slot.duration_s / 60.0), 2) if self._active_slot else 0.0,
+            "recent_slots": [
+                {
+                    "timeslot": s.start.isoformat(),
+                    "signal": s.signal,
+                    "energy_kwh": round(s.energy_kwh, 6),
+                    "profit": round(s.profit, 4) if s.profit is not None else None,
+                    "was_backup": s.was_backup,
+                    "cancelled": s.cancelled,
+                    "baseline_w": round(s.baseline_w, 2) if s.baseline_w is not None else None,
+                    "mffr_price": s.mffr_price,
+                    "nordpool_price": s.nordpool_price,
+                }
+                for s in list(self._recent_slots)
+            ],
+        }
+        return data
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        return await self._async_update_logic()
