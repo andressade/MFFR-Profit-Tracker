@@ -26,9 +26,12 @@ Install
 What it provides
 ----------------
 
+- `sensor.mffr_profit_tracker_signal` (UP/DOWN/IDLE)
 - `sensor.mffr_profit_tracker_power` (W, baseline-adjusted)
 - `sensor.mffr_profit_tracker_slot_energy` (kWh)
 - `sensor.mffr_profit_tracker_slot_profit` (€)
+- `sensor.mffr_profit_tracker_mffr_price` (€/kWh)
+- `sensor.mffr_profit_tracker_nord_pool_price` (€/kWh)
 - `sensor.mffr_profit_tracker_today_profit` (€)
 - `sensor.mffr_profit_tracker_week_profit` (€)
 - `sensor.mffr_profit_tracker_month_profit` (€)

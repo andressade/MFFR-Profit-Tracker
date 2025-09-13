@@ -21,6 +21,7 @@ from .const import (
     ATTR_CANCELLED,
     ATTR_BASELINE_W,
     ATTR_MFFR_POWER_W,
+    ATTR_SIGNAL,
 )
 from .coordinator import MFFRCoordinator
 
@@ -28,10 +29,13 @@ from .coordinator import MFFRCoordinator
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
     coordinator: MFFRCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[SensorEntity] = []
-    # Signal is read directly from the configured mode entity; no separate signal sensor is exposed.
+    # Expose a simple signal sensor (UP/DOWN/IDLE) for real-time automations.
+    entities.append(MFFRSignalSensor(coordinator, entry))
     entities.append(MFFRPowerSensor(coordinator, entry))
     entities.append(MFFRSlotEnergySensor(coordinator, entry))
     entities.append(MFFRSlotProfitSensor(coordinator, entry))
+    entities.append(MFFRPriceSensor(coordinator, entry))
+    entities.append(NordpoolPriceSensor(coordinator, entry))
     entities.append(MFFRTodayProfitSensor(coordinator, entry))
     entities.append(MFFRWeekProfitSensor(coordinator, entry))
     entities.append(MFFRMonthProfitSensor(coordinator, entry))
@@ -71,8 +75,25 @@ class BaseMFFRSensor(CoordinatorEntity[MFFRCoordinator], SensorEntity):
             ATTR_CANCELLED: data.get("cancelled"),
             ATTR_BASELINE_W: data.get("baseline_w"),
             ATTR_MFFR_POWER_W: data.get("mffr_power_w"),
+            ATTR_SIGNAL: data.get("signal"),
+            "nps_source_active": data.get("nps_source_active"),
+            "price_cache_hit": data.get("price_cache_hit"),
+            "last_price_fetch": data.get("last_price_fetch").isoformat() if isinstance(data.get("last_price_fetch"), datetime) else None,
         }
         return attrs
+
+
+class MFFRSignalSensor(BaseMFFRSensor):
+    _attr_name = "Signal"
+    _attr_icon = "mdi:swap-vertical"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry.entry_id}_signal"
+
+    @property
+    def native_value(self) -> str | None:
+        return (self.coordinator.data or {}).get("signal")
 
 
 class MFFRPowerSensor(BaseMFFRSensor):
@@ -118,6 +139,36 @@ class MFFRSlotProfitSensor(BaseMFFRSensor):
     @property
     def native_value(self) -> float | None:
         return (self.coordinator.data or {}).get("slot_profit")
+
+
+class MFFRPriceSensor(BaseMFFRSensor):
+    _attr_name = "MFFR Price"
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "€/kWh"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry.entry_id}_mffr_price"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("mffr_price")
+
+
+class NordpoolPriceSensor(BaseMFFRSensor):
+    _attr_name = "Nord Pool Price"
+    _attr_icon = "mdi:cash"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "€/kWh"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._entry.entry_id}_nordpool_price"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("nordpool_price")
 
 
 class MFFRTodayProfitSensor(BaseMFFRSensor):

@@ -90,6 +90,9 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._baseline_samples: int = 0
         self._baseline_last_w: float = 0.0
         self._last_ts: Optional[datetime] = None
+        # Detect early cancellations even if mode remains BUY/SELL:
+        # accumulate time with near-zero MFFR power while signal claims active
+        self._active_idle_s: float = 0.0
 
         # Cache per-slot prices keyed by local slot-start ISO
         # value: {"mfrr_price": float, "nps_price": float}
@@ -365,9 +368,11 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             if not self._active_slot:
                 was_backup = not (now.minute % 15 == 0 and now.second < 10)
                 self._active_slot = Slot(start=slot_start, end=slot_end, signal=signal, was_backup=was_backup)
+                self._active_idle_s = 0.0
             if self._active_slot and self._active_slot.signal != signal:
                 self._finalize_active_slot()
                 self._active_slot = Slot(start=slot_start, end=slot_end, signal=signal, was_backup=True)
+                self._active_idle_s = 0.0
 
             if self._active_slot:
                 # Choose NPS price source per configuration
@@ -383,14 +388,35 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 self._active_slot.baseline_w = self._active_slot.baseline_w if self._active_slot.baseline_w is not None else baseline_w
                 self._active_slot.energy_kwh += (mffr_power_w * dt_s) / 3_600_000.0
                 self._active_slot.duration_s += dt_s
+
+                # Early cancellation heuristic: if MFFR power collapses close to baseline
+                # and stays low for a while while the signal still claims active, treat as cancelled.
+                try:
+                    low_threshold = 100.0  # W
+                    grace_seconds = 60.0   # s
+                    if mffr_power_w <= low_threshold:
+                        self._active_idle_s += dt_s
+                    else:
+                        self._active_idle_s = 0.0
+                    if self._active_idle_s >= grace_seconds:
+                        self._active_slot.cancelled = True
+                        self._finalize_active_slot()
+                        self._active_idle_s = 0.0
+                except Exception:
+                    # Never let heuristic break updates
+                    self._active_idle_s = 0.0
         else:
             if self._active_slot:
                 self._active_slot.cancelled = True
                 self._finalize_active_slot()
+                self._active_idle_s = 0.0
 
-        if now >= slot_end:
-            if self._active_slot:
-                self._finalize_active_slot()
+        # Finalize strictly based on the active slot's stored end time.
+        # Using a "now"-derived slot_end can miss the boundary right after a quarter rollover
+        # and delay finalization until the next quarter.
+        if self._active_slot and now >= self._active_slot.end:
+            self._finalize_active_slot()
+            self._active_idle_s = 0.0
 
         # Backfill profits for recent finalized slots if prices became available later
         backfilled = False
@@ -431,6 +457,11 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 slot_prices.get("nps_price") if self.nps_source in ("api", "auto") and slot_prices.get("nps_price") is not None else nordpool
             ),
             "mffr_price": mffr_price,
+            "nps_source_active": (
+                "api" if (self.nps_source == "api" or (self.nps_source == "auto" and slot_prices.get("nps_price") is not None)) else "ha"
+            ),
+            "price_cache_hit": bool(slot_prices),
+            "last_price_fetch": self._last_price_fetch,
             "was_backup": bool(self._active_slot.was_backup) if self._active_slot else False,
             "cancelled": bool(self._active_slot.cancelled) if self._active_slot else False,
             "baseline_w": round(baseline_w, 2) if baseline_w is not None else None,
