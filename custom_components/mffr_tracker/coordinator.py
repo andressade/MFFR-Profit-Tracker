@@ -185,14 +185,18 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             async with self._session.get(url, timeout=10) as resp:
                 if resp.status != 200:
+                    self.logger.warning("FRR price fetch HTTP %s", resp.status)
                     return
                 data = await resp.json()
         except Exception:
+            self.logger.exception("FRR price fetch failed")
             return
 
         items = data.get("data") if isinstance(data, dict) else None
         if not isinstance(items, list):
+            self.logger.debug("FRR response has no data list")
             return
+        added = 0
         for item in items:
             start_s = item.get("start")
             mp = item.get("mfrr_price")
@@ -209,6 +213,8 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             if np is not None:
                 rec["nps_price"] = float(np)
             self._mffr_price_cache[slot_key] = rec
+            added += 1
+        self.logger.debug("FRR cached %s slots; example key=%s", added, next(iter(self._mffr_price_cache.keys()), None))
 
     def _get_slot_prices_for(self, ts: datetime) -> Dict[str, float]:
         key = _quarter_start(ts).isoformat()
@@ -226,6 +232,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         # Fetch at most once per 60 seconds and only if slot prices missing
         if not self._get_slot_prices_for(now):
             if self._last_price_fetch is None or (now - self._last_price_fetch) >= timedelta(seconds=60):
+                self.logger.debug("FRR prices missing for slot %s → fetching", _quarter_start(now).isoformat())
                 await self._fetch_mffr_prices(now)
                 self._last_price_fetch = now
 

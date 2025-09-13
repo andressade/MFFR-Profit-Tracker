@@ -115,7 +115,8 @@ class MFFRSlotEnergySensor(BaseMFFRSensor):
     _attr_name = "Slot Energy"
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = "kWh"
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    # Energy over the current slot; increases during slot and resets next slot
+    _attr_state_class = SensorStateClass.TOTAL
 
     @property
     def unique_id(self) -> str:
