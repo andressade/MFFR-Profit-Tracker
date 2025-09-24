@@ -18,11 +18,13 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_FUSEBOX_FEE,
     CONF_BASELINE_ENABLED,
+    CONF_VERIFY_SSL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_FUSEBOX_FEE,
     DEFAULT_BASELINE_ENABLED,
     CONF_NPS_SOURCE,
     DEFAULT_NPS_SOURCE,
+    DEFAULT_VERIFY_SSL,
 )
 
 
@@ -65,6 +67,7 @@ class MFFRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_NPS_SOURCE, default=DEFAULT_NPS_SOURCE): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=["ha", "api", "auto"], mode=selector.SelectSelectorMode.DROPDOWN)
                 ),
+                vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="user", data_schema=data_schema)
@@ -106,6 +109,7 @@ class MFFROptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(CONF_NPS_SOURCE, default=data.get(CONF_NPS_SOURCE, DEFAULT_NPS_SOURCE)): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=["ha", "api", "auto"], mode=selector.SelectSelectorMode.DROPDOWN)
                 ),
+                vol.Optional(CONF_VERIFY_SSL, default=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

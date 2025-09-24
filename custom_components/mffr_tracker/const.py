@@ -8,11 +8,13 @@ CONF_SCAN_INTERVAL = "scan_interval"
 CONF_FUSEBOX_FEE = "fusebox_fee_percent"
 CONF_BASELINE_ENABLED = "baseline_enabled"
 CONF_NPS_SOURCE = "nps_source"  # 'ha' | 'api' | 'auto'
+CONF_VERIFY_SSL = "verify_ssl"
 
 DEFAULT_SCAN_INTERVAL = 10
 DEFAULT_FUSEBOX_FEE = 20.0
 DEFAULT_BASELINE_ENABLED = True
 DEFAULT_NPS_SOURCE = "ha"
+DEFAULT_VERIFY_SSL = False
 
 ATTR_SLOT_START = "current_slot_start"
 ATTR_SLOT_END = "current_slot_end"

@@ -12,7 +12,8 @@
           "scan_interval": "Scan interval (seconds)",
           "fusebox_fee_percent": "Operator fee (%)",
           "baseline_enabled": "Use baseline-adjusted power",
-          "nps_source": "Nord Pool price source"
+          "nps_source": "Nord Pool price source",
+          "verify_ssl": "Verify SSL certificates (advanced)"
         },
         "data_description": {
           "battery_mode_selector": "Entity to read current signal from. Accepts sensor or input_select. Mapping is case-insensitive: contains 'sell' → UP, contains 'buy' → DOWN, otherwise → IDLE. Example: sensor.qw_mode.",
@@ -22,7 +23,8 @@
           "scan_interval": "How often to poll entities and update calculations. Default: 10 seconds.",
           "fusebox_fee_percent": "Percentage fee applied to activation revenue (e.g., 20 = 20%).",
           "baseline_enabled": "When enabled, subtracts idle baseline from battery power to compute MFFR power.",
-          "nps_source": "Where to take Nord Pool price from: 'ha' = HA sensor, 'api' = external API, 'auto' = API if available, otherwise HA."
+          "nps_source": "Where to take Nord Pool price from: 'ha' = HA sensor, 'api' = external API, 'auto' = API if available, otherwise HA.",
+          "verify_ssl": "Enable to enforce TLS certificate validation. Off by default to accommodate the FRR API deployment."
         }
       }
     },
@@ -43,7 +45,8 @@
             "scan_interval": "Scan interval (seconds)",
             "fusebox_fee_percent": "Operator fee (%)",
             "baseline_enabled": "Use baseline-adjusted power",
-            "nps_source": "Nord Pool price source"
+            "nps_source": "Nord Pool price source",
+            "verify_ssl": "Verify SSL certificates (advanced)"
           },
           "data_description": {
             "battery_mode_selector": "Entity providing signal state (buy/sell/normal → DOWN/UP/IDLE). Accepts sensor or input_select.",
@@ -53,7 +56,8 @@
             "scan_interval": "Update frequency in seconds. Default: 10.",
             "fusebox_fee_percent": "Fee percentage deducted from activation revenue.",
             "baseline_enabled": "Subtract idle baseline to get MFFR power (recommended).",
-            "nps_source": "Choose 'ha', 'api' or 'auto' for price source handling."
+            "nps_source": "Choose 'ha', 'api' or 'auto' for price source handling.",
+            "verify_ssl": "Enable to enforce TLS certificate validation. Off by default to accommodate the FRR API deployment."
           }
         }
       }

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Deque, Dict, Optional, Tuple
 import logging
 
+from aiohttp import ClientConnectorCertificateError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers import aiohttp_client
@@ -22,10 +23,12 @@ from .const import (
     CONF_FUSEBOX_FEE,
     CONF_BASELINE_ENABLED,
     CONF_NPS_SOURCE,
+    CONF_VERIFY_SSL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_FUSEBOX_FEE,
     DEFAULT_BASELINE_ENABLED,
     DEFAULT_NPS_SOURCE,
+    DEFAULT_VERIFY_SSL,
 )
 
 
@@ -64,6 +67,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.fusebox_fee_pct = float(options.get(CONF_FUSEBOX_FEE, data.get(CONF_FUSEBOX_FEE, DEFAULT_FUSEBOX_FEE)))
         self.baseline_enabled = bool(options.get(CONF_BASELINE_ENABLED, data.get(CONF_BASELINE_ENABLED, DEFAULT_BASELINE_ENABLED)))
         self.nps_source = (options.get(CONF_NPS_SOURCE, data.get(CONF_NPS_SOURCE, DEFAULT_NPS_SOURCE)) or "ha").lower()
+        self.verify_ssl = bool(options.get(CONF_VERIFY_SSL, data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)))
 
         super().__init__(
             hass,
@@ -71,6 +75,11 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             name="mffr_tracker",
             update_interval=timedelta(seconds=self.scan_seconds),
         )
+
+        if not self.verify_ssl:
+            self.logger.warning(
+                "FRR price fetch configured with SSL verification disabled; enable it once tihend.energy presents a trusted certificate."
+            )
 
         self._recent_slots: Deque[Slot] = deque(maxlen=48)
         self._active_slot: Optional[Slot] = None
@@ -183,11 +192,20 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         # Fetch current set of FRR prices (15-min granularity) and cache
         url = "https://tihend.energy/api/v1/frr"
         try:
-            async with self._session.get(url, timeout=10) as resp:
+            async with self._session.get(url, timeout=10, ssl=self.verify_ssl) as resp:
                 if resp.status != 200:
                     self.logger.warning("FRR price fetch HTTP %s", resp.status)
                     return
                 data = await resp.json()
+        except ClientConnectorCertificateError as exc:
+            if self.verify_ssl:
+                self.logger.error(
+                    "FRR price fetch failed due to certificate error. Disable 'Verify SSL certificates' in options to skip verification: %s",
+                    exc,
+                )
+            else:
+                self.logger.error("FRR price fetch failed despite SSL verification disabled: %s", exc)
+            return
         except Exception:
             self.logger.exception("FRR price fetch failed")
             return
