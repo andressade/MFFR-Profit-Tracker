@@ -29,6 +29,8 @@ from .const import (
     DEFAULT_BASELINE_ENABLED,
     DEFAULT_NPS_SOURCE,
     DEFAULT_VERIFY_SSL,
+    ATTR_POWER_SOURCE,
+    ATTR_QW_POWER_LIMIT,
 )
 
 
@@ -396,6 +398,14 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
         chosen_nps_price, active_source = self._select_nps_price(slot_prices, nordpool)
 
+        qw_power_state = self.hass.states.get("sensor.qw_powerlimit")
+        qw_power_w = None
+        if qw_power_state and qw_power_state.state not in ("unknown", "unavailable", ""):
+            try:
+                qw_power_w = abs(float(qw_power_state.state))
+            except (TypeError, ValueError):
+                qw_power_w = None
+
         if self._last_ts is None:
             self._last_ts = now
         dt_s = max(0.0, (now - self._last_ts).total_seconds())
@@ -404,6 +414,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         await self._update_baseline(battery_w, dt_s, signal, now)
 
         baseline_w = None
+        power_source = "battery"
         if self.baseline_enabled:
             baseline_w = None
             if self._baseline_samples > 0:
@@ -413,6 +424,10 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             mffr_power_w = abs(battery_w - (baseline_w or 0.0))
         else:
             mffr_power_w = abs(battery_w)
+
+        if signal in ("UP", "DOWN") and qw_power_w is not None and qw_power_w > 0:
+            mffr_power_w = qw_power_w
+            power_source = "qilowatt_powerlimit"
 
         slot_start = _quarter_start(now)
         slot_end = slot_start + timedelta(minutes=15)
@@ -521,6 +536,8 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "cancelled": bool(self._active_slot.cancelled) if self._active_slot else False,
             "baseline_w": round(baseline_w, 2) if baseline_w is not None else None,
             "duration_minutes": round((self._active_slot.duration_s / 60.0), 2) if self._active_slot else 0.0,
+            ATTR_POWER_SOURCE: power_source,
+            ATTR_QW_POWER_LIMIT: round(qw_power_w, 2) if qw_power_w is not None else None,
             "recent_slots": [
                 {
                     "timeslot": s.start.isoformat(),
