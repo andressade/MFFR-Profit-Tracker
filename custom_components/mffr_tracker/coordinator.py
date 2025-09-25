@@ -265,10 +265,16 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         return fallback_price, "ha"
 
     def _mode_to_signal(self, mode: str) -> str:
-        m = (mode or "").lower()
-        if "sell" in m:
+        m = (mode or "").strip().lower()
+        if not m:
+            return "IDLE"
+
+        up_tokens = {"sell", "up", "frrup", "frr_up", "frup", "frr up"}
+        down_tokens = {"buy", "down", "frrdown", "frr_down", "frdown", "frr down"}
+
+        if any(m == token or m.startswith(token) for token in up_tokens) or "sell" in m:
             return "UP"
-        if "buy" in m:
+        if any(m == token or m.startswith(token) for token in down_tokens) or "buy" in m:
             return "DOWN"
         return "IDLE"
 
