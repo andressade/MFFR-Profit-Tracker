@@ -225,7 +225,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             if not dt:
                 continue
             # Slot-level key (15-min aligned start)
-            slot_key = _quarter_start(dt).isoformat()
+            slot_key = dt_util.as_utc(_quarter_start(dt)).isoformat()
             rec = self._mffr_price_cache.get(slot_key, {})
             rec["mfrr_price"] = self._normalize_price(mp)
             if np is not None:
@@ -235,7 +235,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.logger.debug("FRR cached %s slots; example key=%s", added, next(iter(self._mffr_price_cache.keys()), None))
 
     def _get_slot_prices_for(self, ts: datetime) -> Dict[str, float]:
-        key = _quarter_start(ts).isoformat()
+        key = dt_util.as_utc(_quarter_start(ts)).isoformat()
         return self._mffr_price_cache.get(key, {})
 
     def _normalize_price(self, price: Any) -> Optional[float]:
