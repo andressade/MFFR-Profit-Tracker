@@ -22,8 +22,6 @@ from .const import (
     ATTR_BASELINE_W,
     ATTR_MFFR_POWER_W,
     ATTR_SIGNAL,
-    ATTR_POWER_SOURCE,
-    ATTR_QW_POWER_LIMIT,
 )
 from .coordinator import MFFRCoordinator
 
@@ -78,8 +76,6 @@ class BaseMFFRSensor(CoordinatorEntity[MFFRCoordinator], SensorEntity):
             ATTR_BASELINE_W: data.get("baseline_w"),
             ATTR_MFFR_POWER_W: data.get("mffr_power_w"),
             ATTR_SIGNAL: data.get("signal"),
-            ATTR_POWER_SOURCE: data.get(ATTR_POWER_SOURCE),
-            ATTR_QW_POWER_LIMIT: data.get(ATTR_QW_POWER_LIMIT),
             "nps_source_active": data.get("nps_source_active"),
             "price_cache_hit": data.get("price_cache_hit"),
             "last_price_fetch": data.get("last_price_fetch").isoformat() if isinstance(data.get("last_price_fetch"), datetime) else None,
