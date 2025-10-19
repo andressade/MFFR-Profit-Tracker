@@ -227,9 +227,9 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Slot-level key (15-min aligned start)
             slot_key = dt_util.as_utc(_quarter_start(dt)).isoformat()
             rec = self._mffr_price_cache.get(slot_key, {})
-            rec["mfrr_price"] = self._normalize_price(mp)
+            rec["mfrr_price"] = self._normalize_price(mp, assume_mwh=True)
             if np is not None:
-                rec["nps_price"] = self._normalize_price(np)
+                rec["nps_price"] = self._normalize_price(np, assume_mwh=True)
             self._mffr_price_cache[slot_key] = rec
             added += 1
         self.logger.debug("FRR cached %s slots; example key=%s", added, next(iter(self._mffr_price_cache.keys()), None))
@@ -238,18 +238,22 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         key = dt_util.as_utc(_quarter_start(ts)).isoformat()
         return self._mffr_price_cache.get(key, {})
 
-    def _normalize_price(self, price: Any) -> Optional[float]:
+    def _normalize_price(self, price: Any, *, assume_mwh: Optional[bool] = None) -> Optional[float]:
         if price is None:
             return None
         try:
             value = float(price)
         except (TypeError, ValueError):
             return None
-        # FRR API returns €/MWh; convert values that look like MWh pricing
-        return value / 1000.0 if abs(value) > 5 else value
+        if assume_mwh is True:
+            return value / 1000.0
+        if assume_mwh is False:
+            return value
+        # Fallback heuristic: big absolute values are almost certainly €/MWh
+        return value / 1000.0 if abs(value) >= 10.0 else value
 
     def _select_nps_price(self, slot_prices: Dict[str, float], nordpool_price: Optional[float]) -> Tuple[Optional[float], str]:
-        api_price = self._normalize_price(slot_prices.get("nps_price"))
+        api_price = self._normalize_price(slot_prices.get("nps_price"), assume_mwh=False)
         fallback_price = self._normalize_price(nordpool_price)
 
         if self.nps_source == "ha":
@@ -344,10 +348,13 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self._year_profit += profit
             self._all_profit += profit
         # Count activations per finalized slot (one per slot with signal)
-        if slot.signal == "UP":
-            self._up_count += 1
-        elif slot.signal == "DOWN":
-            self._down_count += 1
+        # Only count slots that actually ran to completion
+        should_count = not slot.was_backup and not slot.cancelled and slot.energy_kwh > 0
+        if should_count:
+            if slot.signal == "UP":
+                self._up_count += 1
+            elif slot.signal == "DOWN":
+                self._down_count += 1
         # Persist after change
         # Note: not awaited here to avoid blocking; schedule task
         self.hass.async_create_task(self._async_save_state())
@@ -392,7 +399,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
         await self._async_update_prices_if_needed(now)
         slot_prices = self._get_slot_prices_for(now)
-        mffr_price = self._normalize_price(slot_prices.get("mfrr_price"))
+        mffr_price = self._normalize_price(slot_prices.get("mfrr_price"), assume_mwh=False)
 
         chosen_nps_price, active_source = self._select_nps_price(slot_prices, nordpool)
 
@@ -470,7 +477,7 @@ class MFFRCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 continue
 
             cached_prices = self._get_slot_prices_for(s.start)
-            cached_mffr = self._normalize_price(cached_prices.get("mfrr_price"))
+            cached_mffr = self._normalize_price(cached_prices.get("mfrr_price"), assume_mwh=False)
             if s.mffr_price is None and cached_mffr is not None:
                 s.mffr_price = cached_mffr
 
